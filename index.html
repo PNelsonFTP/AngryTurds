@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Angry Turds</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a0e05; }
+    canvas { display: block; }
+    
+    :root {
+      --font-display: 'Lilita One', cursive;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --color-brown: #5C3A1E;
+      --color-brown-light: #8B5E3C;
+      --color-brown-dark: #3A2410;
+      --color-gold: #FFD700;
+      --color-green: #4CAF50;
+      --color-red: #E53935;
+    }
+    
+    .game-ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      font-family: var(--font-body);
+    }
+    .game-ui button, .game-ui [data-interactive] {
+      pointer-events: auto;
+    }
+    
+    #hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      z-index: 20;
+      pointer-events: none;
+    }
+    
+    .hud-score {
+      font-family: var(--font-display);
+      font-size: 28px;
+      color: #fff;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.7), 0 0 12px rgba(0,0,0,0.3);
+    }
+    
+    .hud-level {
+      font-family: var(--font-display);
+      font-size: 20px;
+      color: var(--color-gold);
+      text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+    }
+    
+    .hud-turds {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    
+    .turd-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #6B4226;
+      border: 2px solid #3E2415;
+      opacity: 0.4;
+    }
+    .turd-icon.active {
+      opacity: 1;
+      box-shadow: 0 0 8px rgba(107, 66, 38, 0.6);
+    }
+    
+    .btn {
+      pointer-events: auto;
+      font-family: var(--font-display);
+      font-size: 18px;
+      padding: 10px 28px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn:hover { transform: scale(1.05); }
+    .btn:active { transform: scale(0.97); }
+    
+    .btn-primary {
+      background: linear-gradient(180deg, #6B4226, #4A2E18);
+      box-shadow: 0 4px 12px rgba(74, 46, 24, 0.5);
+    }
+    .btn-success {
+      background: linear-gradient(180deg, #4CAF50, #388E3C);
+      box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+    }
+    .btn-danger {
+      background: linear-gradient(180deg, #E53935, #C62828);
+      box-shadow: 0 4px 12px rgba(229, 57, 53, 0.4);
+    }
+    
+    #menu-overlay, #level-complete, #game-over {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      pointer-events: auto;
+    }
+    
+    #menu-overlay { background: rgba(26, 14, 5, 0.92); }
+    #level-complete { background: rgba(26, 14, 5, 0.88); display: none; }
+    #game-over { background: rgba(26, 14, 5, 0.88); display: none; }
+    
+    .menu-title {
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 7vw, 5rem);
+      color: var(--color-gold);
+      text-shadow: 0 4px 16px rgba(0,0,0,0.6), 0 0 40px rgba(255, 215, 0, 0.3);
+      margin-bottom: 8px;
+    }
+    
+    .menu-subtitle {
+      font-family: var(--font-body);
+      font-size: 16px;
+      color: #a08060;
+      margin-bottom: 32px;
+    }
+    
+    .stars-display {
+      font-size: 48px;
+      margin: 16px 0;
+      display: flex;
+      gap: 8px;
+    }
+    .star { opacity: 0.3; filter: grayscale(1); transition: all 0.3s ease; }
+    .star.earned { opacity: 1; filter: none; }
+    
+    .overlay-score {
+      font-family: var(--font-display);
+      font-size: 24px;
+      color: #fff;
+      margin-bottom: 24px;
+    }
+    
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .sound-toggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 200;
+      pointer-events: auto;
+      background: rgba(0,0,0,0.5);
+      border: none;
+      color: #fff;
+      font-size: 22px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="hud" style="display:none;">
+    <div>
+      <div class="hud-score" id="scoreDisplay">Score: 0</div>
+      <div class="hud-level" id="levelDisplay">Level 1</div>
+    </div>
+    <div class="hud-turds" id="turdsDisplay"></div>
+  </div>
+
+  <button class="sound-toggle" id="soundToggle" style="display:none;" data-testid="sound-toggle">🔊</button>
+
+  <div id="menu-overlay">
+    <div class="menu-title">ANGRY TURDS</div>
+    <div class="menu-subtitle">Fling poop. Destroy stuff. Feel great.</div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="startBtn" data-testid="button-start">PLAY</button>
+    </div>
+  </div>
+
+  <div id="level-complete">
+    <div class="menu-title" style="font-size: clamp(1.8rem, 5vw, 3rem);">LEVEL COMPLETE</div>
+    <div class="stars-display" id="starsDisplay">
+      <span class="star" data-testid="star-1">⭐</span>
+      <span class="star" data-testid="star-2">⭐</span>
+      <span class="star" data-testid="star-3">⭐</span>
+    </div>
+    <div class="overlay-score" id="completionScore">Score: 0</div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="nextLevelBtn" data-testid="button-next-level">NEXT LEVEL</button>
+      <button class="btn btn-danger" id="replayBtn" data-testid="button-replay">REPLAY</button>
+    </div>
+  </div>
+
+  <div id="game-over">
+    <div class="menu-title" style="font-size: clamp(1.8rem, 5vw, 3rem); color: #E53935;">GAME OVER</div>
+    <div class="overlay-score" id="gameOverScore">Score: 0</div>
+    <div class="btn-group">
+      <button class="btn btn-danger" id="retryBtn" data-testid="button-retry">RETRY</button>
+      <button class="btn btn-primary" id="menuBtn" data-testid="button-menu">MENU</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+<script data-pplx-inline-edit>
+(function(){
+  if(window===window.top)return;
+  function inlineAll(orig,clone){
+    if(orig.nodeType!==1)return;
+    try{
+      var cs=getComputedStyle(orig);
+      var t='';
+      for(var i=0;i<cs.length;i++){t+=cs[i]+':'+cs.getPropertyValue(cs[i])+';';}
+      clone.style.cssText=t;
+    }catch(e){}
+    var oc=orig.children,cc=clone.children;
+    for(var j=0;j<oc.length&&j<cc.length;j++){inlineAll(oc[j],cc[j]);}
+  }
+  function stripExternal(clone){
+    var imgs=clone.querySelectorAll('img');
+    for(var i=0;i<imgs.length;i++){
+      var s=imgs[i].getAttribute('src');
+      if(s&&!s.startsWith('data:'))imgs[i].removeAttribute('src');
+    }
+    var all=clone.querySelectorAll('*');
+    for(var i=0;i<all.length;i++){
+      var st=all[i].style.cssText;
+      if(st&&st.indexOf('url(')>=0){
+        all[i].style.cssText=st.replace(/url\(["']?(?!data:)[^)"']*["']?\)/gi,'none');
+      }
+    }
+  }
+  window.addEventListener('message',function(e){
+    if(!e.data||e.data.type!=='INLINE_EDIT_CAPTURE_REQUEST')return;
+    var scrollX=window.scrollX||window.pageXOffset||0;
+    var scrollY=window.scrollY||window.pageYOffset||0;
+    var w=window.innerWidth,h=window.innerHeight;
+    try{
+      var clone=document.documentElement.cloneNode(true);
+      var rm=clone.querySelectorAll('script,link[rel="stylesheet"],style');
+      for(var i=0;i<rm.length;i++){rm[i].remove();}
+      inlineAll(document.documentElement,clone);
+      stripExternal(clone);
+      var html=new XMLSerializer().serializeToString(clone);
+      var svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'
+        +'<foreignObject width="100%" height="100%">'
+        +'<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+w+'px;height:'+h+'px;overflow:hidden">'
+        +'<div style="transform:translate(-'+scrollX+'px,-'+scrollY+'px);transform-origin:top left">'
+        +html+'</div></div></foreignObject></svg>';
+      var svgUrl='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+      var img=new Image();
+      img.onload=function(){
+        var c=document.createElement('canvas');c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0);
+        window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:c.toDataURL('image/png'),scrollX:scrollX,scrollY:scrollY},'*');
+      };
+      img.onerror=function(){
+        window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:null,scrollX:scrollX,scrollY:scrollY},'*');
+      };
+      img.src=svgUrl;
+    }catch(err){
+      window.parent.postMessage({type:'INLINE_EDIT_SCREENSHOT_RESULT',dataUrl:null,scrollX:scrollX,scrollY:scrollY},'*');
+    }
+  });
+})();
+</script></body>
+</html>
