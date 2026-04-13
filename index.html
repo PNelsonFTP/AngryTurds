@@ -202,6 +202,30 @@
       -webkit-tap-highlight-color: transparent;
     }
     
+    /* Fullscreen button */
+    .fs-btn {
+      position: fixed;
+      bottom: calc(10px + var(--sab));
+      right: calc(10px + var(--sar));
+      z-index: 200;
+      pointer-events: auto;
+      background: rgba(0,0,0,0.55);
+      border: 2px solid rgba(255,255,255,0.25);
+      color: #fff;
+      font-size: 22px;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+      backdrop-filter: blur(4px);
+      transition: opacity 0.2s ease;
+    }
+    .fs-btn:active { transform: scale(0.9); }
+
     /* Fullscreen tap prompt */
     #fs-prompt {
       position: fixed;
@@ -268,6 +292,7 @@
   </div>
 
   <button class="sound-toggle" id="soundToggle" style="display:none;" data-testid="sound-toggle">🔊</button>
+  <button class="fs-btn" id="fsBtn" data-testid="fullscreen-btn">⛶</button>
 
   <div id="menu-overlay">
     <div class="menu-title">ANGRY TURDS</div>

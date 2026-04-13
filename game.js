@@ -1,8 +1,8 @@
 // ============================================================
-// ANGRY TURDS v3 — Professional Mobile-First Game
+// ANGRY TURDS v4 — Professional Mobile-First Game
 // ============================================================
 // Virtual world: 960×540, scaled to fill screen edge-to-edge
-// All game objects ~2x bigger than v1 for mobile visibility
+// All game objects LARGE for mobile phones — poop, pigs, slingshot
 
 // ---- VIRTUAL COORDINATE SYSTEM ----
 const VW = 960;
@@ -11,14 +11,14 @@ const VH = 540;
 // ---- GAME CONSTANTS ----
 const GRAVITY = 500;
 const GROUND_H = 55;             // ground strip height
-const SLING_X = 155;             // slingshot X position
-const SLING_POWER = 4.0;
-const MAX_PULL = 120;
+const SLING_X = 160;             // slingshot X position
+const SLING_POWER = 5.0;         // 1.25x v3 power for better reach
+const MAX_PULL = 140;            // bigger pull range
 const MIN_VELOCITY = 8;
 const DAMAGE_THRESHOLD = 12;
 const SETTLE_TIME = 2.5;
-const TURD_RADIUS = 28;          // big chunky turds
-const PIG_SIZE_DEFAULT = 32;     // big visible pigs
+const TURD_RADIUS = 44;          // BIG chunky turds — very visible on phone
+const PIG_SIZE_DEFAULT = 48;     // BIG visible pigs
 const BLOCK_TYPES = { TP: 'tp', STONE: 'stone', GLASS: 'glass' };
 
 // ---- ORIENTATION STATE ----
@@ -35,7 +35,7 @@ let canvasW = 0;
 let canvasH = 0;
 
 function resize() {
-  // Use dvh-aware sizing
+  // Use visualViewport for accurate mobile sizing (avoids address bar issues)
   const vv = window.visualViewport;
   const sw = vv ? vv.width : window.innerWidth;
   const sh = vv ? vv.height : window.innerHeight;
@@ -61,9 +61,21 @@ function resize() {
   checkOrientation(sw, sh);
 }
 
+// Robust resize: multiple passes to handle rotation lag on iOS
+function fullResize() {
+  resize();
+  // iOS needs multiple delayed resize calls during rotation
+  // The viewport dimensions change over ~300ms during rotation animation
+  setTimeout(resize, 50);
+  setTimeout(resize, 150);
+  setTimeout(resize, 300);
+  setTimeout(resize, 500);
+  setTimeout(() => { resize(); window.scrollTo(0, 0); }, 600);
+}
+
 resize();
 window.addEventListener('resize', resize);
-window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+window.addEventListener('orientationchange', fullResize);
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', resize);
   window.visualViewport.addEventListener('scroll', resize);
@@ -72,6 +84,49 @@ if (window.visualViewport) {
 // Scroll to hide address bar on mobile
 setTimeout(() => window.scrollTo(0, 1), 100);
 setTimeout(() => window.scrollTo(0, 0), 300);
+setTimeout(resize, 500);
+
+// ---- FULLSCREEN ----
+let fullscreenRequested = false;
+
+function tryFullscreen() {
+  if (fullscreenRequested) return;
+  const el = document.documentElement;
+  const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (rfs) {
+    rfs.call(el).then(() => {
+      fullscreenRequested = true;
+      setTimeout(fullResize, 200);
+    }).catch(() => {});
+  }
+}
+
+// Auto-fullscreen on first user interaction
+function onFirstInteraction() {
+  tryFullscreen();
+  document.removeEventListener('touchstart', onFirstInteraction);
+  document.removeEventListener('click', onFirstInteraction);
+}
+document.addEventListener('touchstart', onFirstInteraction, { once: true });
+document.addEventListener('click', onFirstInteraction, { once: true });
+
+// Fullscreen button
+const fsBtn = document.getElementById('fsBtn');
+if (fsBtn) {
+  fsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    tryFullscreen();
+  });
+}
+
+// Hide fsBtn when already fullscreen
+function updateFsBtn() {
+  if (!fsBtn) return;
+  const isFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  fsBtn.style.display = isFS ? 'none' : 'flex';
+}
+document.addEventListener('fullscreenchange', updateFsBtn);
+document.addEventListener('webkitfullscreenchange', updateFsBtn);
 
 function screenToVirtual(sx, sy) {
   return {
@@ -216,7 +271,7 @@ class Body {
 // ---- TURD (big chunky poop projectile) ----
 class Turd {
   constructor(x,y) {
-    Object.assign(this, {x,y,vx:0,vy:0,radius:TURD_RADIUS,mass:5,
+    Object.assign(this, {x,y,vx:0,vy:0,radius:TURD_RADIUS,mass:7,
       launched:false,active:true,trail:[],rotation:0,squish:1,splatted:false});
   }
   update(dt) {
@@ -399,24 +454,24 @@ function drawTPRoll(c,w,h,dmg) {
   if (dmg>0.6) { c.strokeStyle='rgba(130,110,90,0.5)'; c.beginPath(); c.moveTo(w*0.2,-h*0.3); c.lineTo(-w*0.15,h*0.15); c.stroke(); c.fillStyle='rgba(0,0,0,0.06)'; c.fillRect(-w*0.2,-h*0.2,w*0.4,h*0.4); }
 }
 
-// ---- SLINGSHOT ----
+// ---- SLINGSHOT (1.6x scale for visibility) ----
 function drawSlingshotBack(c,sx,sy) {
-  // Back post
+  // Back post (thick, tall)
   c.fillStyle = '#4A2E18';
-  c.fillRect(sx-22, sy-55, 10, 65);
+  c.fillRect(sx-34, sy-88, 16, 104);
 }
 
 function drawSlingshotFront(c,sx,sy) {
   // Front post
   c.fillStyle = '#6B4226';
-  c.fillRect(sx+12, sy-55, 10, 65);
+  c.fillRect(sx+18, sy-88, 16, 104);
   // Base
   c.fillStyle = '#4A2E18';
-  c.fillRect(sx-24, sy+7, 48, 11);
-  c.fillRect(sx-18, sy+15, 36, 22);
+  c.fillRect(sx-38, sy+12, 76, 16);
+  c.fillRect(sx-28, sy+26, 56, 32);
   // Fork tops
   c.fillStyle = '#6B4226';
-  c.beginPath(); c.arc(sx-17,sy-53,7,0,Math.PI*2); c.arc(sx+17,sy-53,7,0,Math.PI*2); c.fill();
+  c.beginPath(); c.arc(sx-26,sy-86,11,0,Math.PI*2); c.arc(sx+26,sy-86,11,0,Math.PI*2); c.fill();
 }
 
 // ---- BACKGROUND ----
@@ -465,97 +520,97 @@ function drawTrajectory(c,sx,sy,vx,vy) {
   }
 }
 
-// ---- LEVELS (all in virtual coords, bigger blocks) ----
+// ---- LEVELS (all in virtual coords, BIG blocks for mobile) ----
 function createLevels() {
   const G = VH - GROUND_H;
-  // Block sizes: pillars ~30w x 100+h, planks ~140w x 25h
+  // Pillar: ~40w x 130+h, Plank: ~200+w x 30h, Pig size 48
   return [
-    { // Level 1 — Simple intro: two big TP pillars + plank, 1 pig
+    { // Level 1 — Simple arch: two TP pillars + plank, 1 pig
       turds: 3,
       blocks: () => [
-        makeBlock(520, G-110, 30, 110, 'tp'),
-        makeBlock(650, G-110, 30, 110, 'tp'),
-        makeBlock(510, G-135, 180, 25, 'tp'),
+        makeBlock(500, G-140, 40, 140, 'tp'),
+        makeBlock(680, G-140, 40, 140, 'tp'),
+        makeBlock(488, G-170, 244, 30, 'tp'),
       ],
-      pigs: () => [ new Pig(600, G-38, 34) ],
+      pigs: () => [ new Pig(610, G-52, 48) ],
     },
     { // Level 2 — Two shelters, 2 pigs
       turds: 4,
       blocks: () => [
-        makeBlock(480, G-90, 28, 90, 'tp'),
-        makeBlock(590, G-90, 28, 90, 'tp'),
-        makeBlock(472, G-115, 154, 25, 'tp'),
-        makeBlock(700, G-100, 28, 100, 'stone'),
-        makeBlock(810, G-100, 28, 100, 'stone'),
-        makeBlock(692, G-125, 154, 25, 'stone'),
+        makeBlock(450, G-130, 38, 130, 'tp'),
+        makeBlock(590, G-130, 38, 130, 'tp'),
+        makeBlock(440, G-160, 200, 30, 'tp'),
+        makeBlock(690, G-140, 38, 140, 'stone'),
+        makeBlock(830, G-140, 38, 140, 'stone'),
+        makeBlock(680, G-170, 200, 30, 'stone'),
       ],
       pigs: () => [
-        new Pig(538, G-34, 30),
-        new Pig(758, G-34, 30),
+        new Pig(520, G-52, 44),
+        new Pig(762, G-52, 44),
       ],
     },
     { // Level 3 — Tower
       turds: 4,
       blocks: () => [
-        makeBlock(570, G-90, 28, 90, 'stone'),
-        makeBlock(690, G-90, 28, 90, 'stone'),
-        makeBlock(562, G-115, 164, 25, 'tp'),
-        makeBlock(595, G-185, 28, 70, 'tp'),
-        makeBlock(665, G-185, 28, 70, 'tp'),
-        makeBlock(587, G-210, 114, 25, 'tp'),
-        makeBlock(630, G-255, 28, 45, 'glass'),
-        makeBlock(622, G-275, 44, 20, 'glass'),
+        makeBlock(540, G-130, 38, 130, 'stone'),
+        makeBlock(700, G-130, 38, 130, 'stone'),
+        makeBlock(528, G-160, 222, 30, 'tp'),
+        makeBlock(575, G-240, 38, 80, 'tp'),
+        makeBlock(665, G-240, 38, 80, 'tp'),
+        makeBlock(563, G-270, 152, 30, 'tp'),
+        makeBlock(610, G-320, 38, 50, 'glass'),
+        makeBlock(600, G-345, 58, 25, 'glass'),
       ],
       pigs: () => [
-        new Pig(632, G-34, 30),
-        new Pig(632, G-140, 26),
+        new Pig(620, G-52, 44),
+        new Pig(620, G-190, 36),
       ],
     },
     { // Level 4 — Fortress
       turds: 5,
       blocks: () => [
-        makeBlock(470, G-130, 28, 130, 'stone'),
-        makeBlock(730, G-130, 28, 130, 'stone'),
-        makeBlock(462, G-155, 304, 25, 'stone'),
-        makeBlock(530, G-80, 22, 80, 'tp'),
-        makeBlock(670, G-80, 22, 80, 'tp'),
-        makeBlock(522, G-100, 178, 20, 'tp'),
-        makeBlock(560, G-40, 100, 20, 'glass'),
-        makeBlock(500, G-200, 22, 45, 'glass'),
-        makeBlock(720, G-200, 22, 45, 'glass'),
-        makeBlock(492, G-220, 258, 20, 'glass'),
+        makeBlock(440, G-160, 38, 160, 'stone'),
+        makeBlock(740, G-160, 38, 160, 'stone'),
+        makeBlock(428, G-190, 362, 30, 'stone'),
+        makeBlock(510, G-110, 32, 110, 'tp'),
+        makeBlock(680, G-110, 32, 110, 'tp'),
+        makeBlock(500, G-140, 222, 30, 'tp'),
+        makeBlock(540, G-55, 140, 25, 'glass'),
+        makeBlock(478, G-250, 32, 60, 'glass'),
+        makeBlock(718, G-250, 32, 60, 'glass'),
+        makeBlock(466, G-275, 296, 25, 'glass'),
       ],
       pigs: () => [
-        new Pig(570, G-34, 28),
-        new Pig(650, G-34, 28),
-        new Pig(610, G-180, 24),
+        new Pig(560, G-52, 42),
+        new Pig(660, G-52, 42),
+        new Pig(610, G-220, 36),
       ],
     },
     { // Level 5 — Twin towers + bridge
       turds: 5,
       blocks: () => [
-        makeBlock(430, G-140, 28, 140, 'stone'),
-        makeBlock(550, G-140, 28, 140, 'stone'),
-        makeBlock(422, G-165, 164, 25, 'stone'),
-        makeBlock(660, G-140, 28, 140, 'stone'),
-        makeBlock(780, G-140, 28, 140, 'stone'),
-        makeBlock(652, G-165, 164, 25, 'stone'),
-        makeBlock(572, G-100, 96, 22, 'tp'),
-        makeBlock(580, G-80, 22, 80, 'tp'),
-        makeBlock(648, G-80, 22, 80, 'tp'),
-        makeBlock(460, G-210, 22, 45, 'glass'),
-        makeBlock(530, G-210, 22, 45, 'glass'),
-        makeBlock(452, G-230, 108, 20, 'glass'),
-        makeBlock(690, G-210, 22, 45, 'glass'),
-        makeBlock(760, G-210, 22, 45, 'glass'),
-        makeBlock(682, G-230, 108, 20, 'glass'),
+        makeBlock(400, G-160, 38, 160, 'stone'),
+        makeBlock(540, G-160, 38, 160, 'stone'),
+        makeBlock(388, G-190, 202, 30, 'stone'),
+        makeBlock(650, G-160, 38, 160, 'stone'),
+        makeBlock(790, G-160, 38, 160, 'stone'),
+        makeBlock(638, G-190, 202, 30, 'stone'),
+        makeBlock(564, G-120, 100, 28, 'tp'),
+        makeBlock(572, G-100, 32, 100, 'tp'),
+        makeBlock(640, G-100, 32, 100, 'tp'),
+        makeBlock(430, G-250, 32, 60, 'glass'),
+        makeBlock(520, G-250, 32, 60, 'glass'),
+        makeBlock(418, G-275, 146, 25, 'glass'),
+        makeBlock(680, G-250, 32, 60, 'glass'),
+        makeBlock(770, G-250, 32, 60, 'glass'),
+        makeBlock(668, G-275, 146, 25, 'glass'),
       ],
       pigs: () => [
-        new Pig(492, G-34, 30),
-        new Pig(722, G-34, 30),
-        new Pig(616, G-34, 26),
-        new Pig(492, G-190, 22),
-        new Pig(722, G-190, 22),
+        new Pig(470, G-52, 44),
+        new Pig(722, G-52, 44),
+        new Pig(608, G-52, 38),
+        new Pig(470, G-220, 32),
+        new Pig(722, G-220, 32),
       ],
     },
   ];
@@ -579,7 +634,7 @@ const state = {
   isPulling:false, settleTimer:0, levels:null, totalScore:0,
 };
 
-function slingY() { return VH - GROUND_H - 110; }
+function slingY() { return VH - GROUND_H - 130; } // higher slingshot base
 
 function loadLevel(idx) {
   const levels = state.levels || createLevels();
@@ -608,7 +663,7 @@ function loadLevel(idx) {
 function spawnNextTurd() {
   if (state.turdsRemaining <= 0) return;
   const sy = slingY();
-  const t = new Turd(SLING_X, sy - 55);
+  const t = new Turd(SLING_X, sy - 85);
   state.currentTurd = t;
   state.turds.push(t);
   state.turdsRemaining--;
@@ -655,14 +710,15 @@ function releaseSling() {
   if (!state.isPulling || !state.currentTurd) return;
   const t = state.currentTurd;
   const sy = slingY();
-  const dx = SLING_X - t.x, dy = (sy-55) - t.y;
+  const restY = sy - 85;
+  const dx = SLING_X - t.x, dy = restY - t.y;
   const dist = Math.sqrt(dx*dx+dy*dy);
   if (dist > 10) {
     t.vx = dx*SLING_POWER; t.vy = dy*SLING_POWER;
     t.launched = true; state.phase = 'flying';
     playLaunch();
   } else {
-    t.x = SLING_X; t.y = sy-55;
+    t.x = SLING_X; t.y = restY;
   }
   state.isPulling = false;
 }
@@ -819,11 +875,12 @@ function update(dt) {
   // Pulling
   if (state.isPulling && state.currentTurd) {
     const sy=slingY();
-    const dx=mouse.x-SLING_X, dy=mouse.y-(sy-55);
+    const restY = sy - 85;
+    const dx=mouse.x-SLING_X, dy=mouse.y-restY;
     const dist=Math.sqrt(dx*dx+dy*dy), clamped=Math.min(dist,MAX_PULL);
     const ang=Math.atan2(dy,dx);
     state.currentTurd.x = SLING_X+Math.cos(ang)*clamped;
-    state.currentTurd.y = (sy-55)+Math.sin(ang)*clamped;
+    state.currentTurd.y = restY+Math.sin(ang)*clamped;
   }
   // Turds
   for (const t of state.turds) {
@@ -877,11 +934,12 @@ function render() {
   if (state.phase==='menu') return;
 
   const sy = slingY();
+  const restY = sy - 85;
   drawSlingshotBack(ctx, SLING_X, sy);
-  // Back band
+  // Back band (attaches to back fork top)
   if (state.isPulling && state.currentTurd) {
-    ctx.strokeStyle='#4A2E18'; ctx.lineWidth=6;
-    ctx.beginPath(); ctx.moveTo(SLING_X-17,sy-51); ctx.lineTo(state.currentTurd.x,state.currentTurd.y); ctx.stroke();
+    ctx.strokeStyle='#4A2E18'; ctx.lineWidth=8;
+    ctx.beginPath(); ctx.moveTo(SLING_X-26,sy-83); ctx.lineTo(state.currentTurd.x,state.currentTurd.y); ctx.stroke();
   }
   for (const b of state.blocks) drawBlock(ctx,b);
   for (const p of state.pigs) p.draw(ctx);
@@ -889,16 +947,16 @@ function render() {
   drawSlingshotFront(ctx, SLING_X, sy);
   // Front band
   if (state.isPulling && state.currentTurd) {
-    ctx.strokeStyle='#6B4226'; ctx.lineWidth=5;
-    ctx.beginPath(); ctx.moveTo(SLING_X+17,sy-51); ctx.lineTo(state.currentTurd.x,state.currentTurd.y); ctx.stroke();
-    const dx=SLING_X-state.currentTurd.x, dy=(sy-55)-state.currentTurd.y;
+    ctx.strokeStyle='#6B4226'; ctx.lineWidth=7;
+    ctx.beginPath(); ctx.moveTo(SLING_X+26,sy-83); ctx.lineTo(state.currentTurd.x,state.currentTurd.y); ctx.stroke();
+    const dx=SLING_X-state.currentTurd.x, dy=restY-state.currentTurd.y;
     drawTrajectory(ctx,state.currentTurd.x,state.currentTurd.y,dx*SLING_POWER,dy*SLING_POWER);
   }
   for (const p of particles) if (p.active) p.draw(ctx);
   if (state.phase==='aiming' && state.currentTurd && !state.isPulling) {
     ctx.fillStyle='rgba(255,255,255,0.55)';
-    ctx.font='600 15px "Plus Jakarta Sans",sans-serif'; ctx.textAlign='center';
-    ctx.fillText('Drag to aim',SLING_X, sy+55);
+    ctx.font='600 18px "Plus Jakarta Sans",sans-serif'; ctx.textAlign='center';
+    ctx.fillText('Drag to aim',SLING_X, sy+75);
   }
 }
 
