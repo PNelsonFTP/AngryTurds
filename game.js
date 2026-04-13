@@ -1,14 +1,19 @@
 // ============================================================
-// ANGRY TURDS — Full Angry Birds Clone with Poop Projectiles
+// ANGRY TURDS v2 — Mobile-First with Virtual Coordinate System
 // ============================================================
+
+// ---- VIRTUAL COORDINATE SYSTEM ----
+// Design at 960×540 (16:9), scale uniformly to fit any screen
+const VIRTUAL_W = 960;
+const VIRTUAL_H = 540;
 
 // ---- CONSTANTS & CONFIG ----
 const GRAVITY = 600;
-const SLING_X = 160;
-const SLING_Y_BASE_OFFSET = 160; // offset from ground
+const SLING_X = 130;
+const SLING_Y_BASE_OFFSET = 140;
 const SLING_POWER = 4.5;
-const MAX_PULL = 110;
-const GROUND_HEIGHT = 80;
+const MAX_PULL = 100;
+const GROUND_HEIGHT = 70;
 const BLOCK_TYPES = { WOOD: 'wood', STONE: 'stone', GLASS: 'glass' };
 const MIN_VELOCITY = 8;
 const DAMAGE_THRESHOLD = 15;
@@ -18,12 +23,56 @@ const SETTLE_TIME = 2.5;
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+let scale = 1;
+let offsetX = 0;
+let offsetY = 0;
+
 function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  // Use visualViewport for iPhone Chrome reliability
+  const vv = window.visualViewport;
+  const screenW = vv ? vv.width : window.innerWidth;
+  const screenH = vv ? vv.height : window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  canvas.width = screenW * dpr;
+  canvas.height = screenH * dpr;
+  canvas.style.width = screenW + 'px';
+  canvas.style.height = screenH + 'px';
+
+  // Scale to fit virtual coords, maintaining aspect ratio
+  const scaleX = screenW / VIRTUAL_W;
+  const scaleY = screenH / VIRTUAL_H;
+  scale = Math.min(scaleX, scaleY);
+
+  // Center the game area (letterbox)
+  offsetX = (screenW - VIRTUAL_W * scale) / 2;
+  offsetY = (screenH - VIRTUAL_H * scale) / 2;
+
+  // Account for DPR in the context transform (applied each frame)
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
+
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', resizeCanvas);
+}
+
+// Convert screen coords to virtual coords
+function screenToVirtual(sx, sy) {
+  return {
+    x: (sx - offsetX) / scale,
+    y: (sy - offsetY) / scale,
+  };
+}
+
+// Set up the canvas transform for rendering in virtual coords
+function applyVirtualTransform() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+}
 
 // ---- AUDIO ----
 let audioCtx = null;
@@ -117,7 +166,7 @@ class Body {
     this.x = x; this.y = y; this.w = w; this.h = h;
     this.vx = 0; this.vy = 0;
     this.angle = 0; this.angularVel = 0;
-    this.type = type; // 'static' or 'dynamic'
+    this.type = type;
     this.bodyType = bodyType;
     this.mass = type === 'static' ? Infinity : (w * h) / 500;
     this.restitution = 0.3;
@@ -152,13 +201,13 @@ class Body {
   }
 }
 
-// ---- POOP PROJECTILE ----
+// ---- POOP PROJECTILE (BIGGER!) ----
 class Turd {
   constructor(x, y) {
     this.x = x; this.y = y;
     this.vx = 0; this.vy = 0;
-    this.radius = 18;
-    this.mass = 3;
+    this.radius = 32; // Much bigger! Was 18
+    this.mass = 5;
     this.launched = false;
     this.active = true;
     this.trail = [];
@@ -183,8 +232,8 @@ class Turd {
       return t.life > 0;
     });
 
-    // Off screen
-    if (this.x > canvas.width + 100 || this.y > canvas.height + 100 || this.x < -200) {
+    // Off screen (using virtual coords)
+    if (this.x > VIRTUAL_W + 100 || this.y > VIRTUAL_H + 100 || this.x < -200) {
       this.active = false;
     }
   }
@@ -196,7 +245,7 @@ class Turd {
       ctx.globalAlpha = a * 0.4;
       ctx.fillStyle = '#5C3A1E';
       ctx.beginPath();
-      ctx.arc(t.x, t.y, this.radius * 0.4 * a, 0, Math.PI * 2);
+      ctx.arc(t.x, t.y, this.radius * 0.35 * a, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
@@ -208,7 +257,6 @@ class Turd {
     ctx.rotate(this.rotation);
     ctx.scale(1, this.squish);
     
-    // Poop body — classic swirl shape
     drawPoop(ctx, 0, 0, this.radius);
     
     ctx.restore();
@@ -284,7 +332,7 @@ function drawPoop(ctx, x, y, size) {
 
 // ---- PIG (ENEMY) ----
 class Pig {
-  constructor(x, y, size = 30) {
+  constructor(x, y, size = 28) {
     this.x = x; this.y = y;
     this.size = size;
     this.vx = 0; this.vy = 0;
@@ -292,7 +340,7 @@ class Pig {
     this.maxHealth = 100;
     this.destroyed = false;
     this.mass = 2;
-    this.expression = 'normal'; // normal, worried, dead
+    this.expression = 'normal';
   }
 
   update(dt) {
@@ -302,8 +350,8 @@ class Pig {
     this.y += this.vy * dt;
     this.vx *= 0.98;
     
-    // Ground collision
-    const groundY = canvas.height - GROUND_HEIGHT;
+    // Ground collision (virtual coords)
+    const groundY = VIRTUAL_H - GROUND_HEIGHT;
     if (this.y + this.size > groundY) {
       this.y = groundY - this.size;
       this.vy *= -0.2;
@@ -374,7 +422,6 @@ class Pig {
       ctx.arc(this.x - s * 0.25, this.y - s * 0.15, s * 0.1, 0, Math.PI * 2);
       ctx.arc(this.x + s * 0.25, this.y - s * 0.15, s * 0.1, 0, Math.PI * 2);
       ctx.fill();
-      // Worried eyebrows
       ctx.strokeStyle = '#333';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -428,105 +475,190 @@ function drawBlock(ctx, block) {
   ctx.translate(block.cx, block.cy);
   ctx.rotate(block.angle);
   
-  let baseColor, darkColor, lightColor;
-  
-  switch (block.material) {
-    case BLOCK_TYPES.WOOD:
-      baseColor = `rgb(${160 - dmg * 40}, ${110 - dmg * 30}, ${60 - dmg * 20})`;
-      darkColor = '#6B4226';
-      lightColor = '#C8956A';
-      break;
-    case BLOCK_TYPES.STONE:
-      baseColor = `rgb(${140 - dmg * 30}, ${140 - dmg * 30}, ${150 - dmg * 30})`;
-      darkColor = '#666';
-      lightColor = '#aaa';
-      break;
-    case BLOCK_TYPES.GLASS:
-      baseColor = `rgba(${160 - dmg * 40}, ${210 - dmg * 40}, ${240 - dmg * 40}, 0.8)`;
-      darkColor = 'rgba(80, 150, 200, 0.6)';
-      lightColor = 'rgba(200, 235, 255, 0.9)';
-      break;
-  }
-  
-  // Block body
-  ctx.fillStyle = baseColor;
-  ctx.fillRect(-w / 2, -h / 2, w, h);
-  
-  // Border
-  ctx.strokeStyle = darkColor;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(-w / 2, -h / 2, w, h);
-  
-  // Highlight edge
-  ctx.fillStyle = lightColor;
-  ctx.fillRect(-w / 2 + 2, -h / 2 + 2, w - 4, 3);
-  
-  // Damage cracks
-  if (dmg > 0.3) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-w * 0.3, -h * 0.4);
-    ctx.lineTo(w * 0.1, h * 0.1);
-    ctx.lineTo(w * 0.3, h * 0.4);
-    ctx.stroke();
-  }
-  if (dmg > 0.6) {
-    ctx.beginPath();
-    ctx.moveTo(w * 0.2, -h * 0.3);
-    ctx.lineTo(-w * 0.1, h * 0.2);
-    ctx.stroke();
+  if (block.material === BLOCK_TYPES.WOOD) {
+    // TOILET PAPER ROLL rendering!
+    drawTPRoll(ctx, w, h, dmg);
+  } else {
+    let baseColor, darkColor, lightColor;
+    
+    switch (block.material) {
+      case BLOCK_TYPES.STONE:
+        baseColor = `rgb(${140 - dmg * 30}, ${140 - dmg * 30}, ${150 - dmg * 30})`;
+        darkColor = '#666';
+        lightColor = '#aaa';
+        break;
+      case BLOCK_TYPES.GLASS:
+        baseColor = `rgba(${160 - dmg * 40}, ${210 - dmg * 40}, ${240 - dmg * 40}, 0.8)`;
+        darkColor = 'rgba(80, 150, 200, 0.6)';
+        lightColor = 'rgba(200, 235, 255, 0.9)';
+        break;
+    }
+    
+    ctx.fillStyle = baseColor;
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeStyle = darkColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.fillStyle = lightColor;
+    ctx.fillRect(-w / 2 + 2, -h / 2 + 2, w - 4, 3);
+    
+    // Damage cracks
+    if (dmg > 0.3) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.3, -h * 0.4);
+      ctx.lineTo(w * 0.1, h * 0.1);
+      ctx.lineTo(w * 0.3, h * 0.4);
+      ctx.stroke();
+    }
+    if (dmg > 0.6) {
+      ctx.beginPath();
+      ctx.moveTo(w * 0.2, -h * 0.3);
+      ctx.lineTo(-w * 0.1, h * 0.2);
+      ctx.stroke();
+    }
   }
   
   ctx.restore();
 }
 
-// ---- SLINGSHOT DRAWING ----
-function drawSlingshot(ctx, slingX, slingY) {
-  // Back fork
-  ctx.fillStyle = '#5C3A1E';
-  ctx.fillRect(slingX - 20, slingY - 50, 8, 55);
+function drawTPRoll(ctx, w, h, dmg) {
+  // Determine if this is more like a horizontal or vertical block
+  const isWide = w > h;
   
-  // Front fork
-  ctx.fillRect(slingX + 12, slingY - 50, 8, 55);
+  // Base color (white to off-white, gets dirtier with damage)
+  const r = Math.round(255 - dmg * 50);
+  const g = Math.round(250 - dmg * 60);
+  const b = Math.round(245 - dmg * 50);
+  
+  // Draw the TP roll body
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+  
+  // Soft paper texture — subtle horizontal lines
+  ctx.strokeStyle = `rgba(200, 190, 180, ${0.3 - dmg * 0.1})`;
+  ctx.lineWidth = 0.5;
+  const lineSpacing = 4;
+  if (isWide) {
+    // Horizontal lines for wide blocks (like planks)
+    for (let ly = -h / 2 + lineSpacing; ly < h / 2; ly += lineSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, ly);
+      ctx.lineTo(w / 2, ly);
+      ctx.stroke();
+    }
+  } else {
+    // Horizontal wrap lines for vertical pillars
+    for (let ly = -h / 2 + lineSpacing; ly < h / 2; ly += lineSpacing) {
+      ctx.beginPath();
+      ctx.moveTo(-w / 2, ly);
+      ctx.lineTo(w / 2, ly);
+      ctx.stroke();
+    }
+  }
+  
+  // Perforated line down the middle
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = `rgba(180, 170, 160, ${0.5 - dmg * 0.2})`;
+  ctx.lineWidth = 0.8;
+  if (isWide) {
+    ctx.beginPath();
+    ctx.moveTo(0, -h / 2);
+    ctx.lineTo(0, h / 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, 0);
+    ctx.lineTo(w / 2, 0);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  
+  // Cardboard tube visible at the ends
+  const tubeColor = `rgb(${180 - dmg * 30}, ${155 - dmg * 25}, ${120 - dmg * 20})`;
+  if (isWide && h > 10) {
+    // Left end — cardboard ring
+    ctx.fillStyle = tubeColor;
+    ctx.beginPath();
+    ctx.ellipse(-w / 2, 0, 3, h / 2 - 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Right end
+    ctx.beginPath();
+    ctx.ellipse(w / 2, 0, 3, h / 2 - 1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (w > 10) {
+    // Top end
+    ctx.fillStyle = tubeColor;
+    ctx.beginPath();
+    ctx.ellipse(0, -h / 2, w / 2 - 1, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Bottom end
+    ctx.beginPath();
+    ctx.ellipse(0, h / 2, w / 2 - 1, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Subtle border
+  ctx.strokeStyle = `rgba(180, 170, 160, 0.6)`;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-w / 2, -h / 2, w, h);
+  
+  // Edge highlight (paper sheen)
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fillRect(-w / 2 + 1, -h / 2 + 1, w - 2, 2);
+  
+  // Damage: tears and crumple
+  if (dmg > 0.3) {
+    ctx.strokeStyle = 'rgba(150, 130, 110, 0.5)';
+    ctx.lineWidth = 1;
+    // Tear line
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.3, -h * 0.4);
+    ctx.lineTo(-w * 0.1, h * 0.0);
+    ctx.lineTo(w * 0.2, h * 0.3);
+    ctx.stroke();
+  }
+  if (dmg > 0.6) {
+    // More tears, paper getting shredded
+    ctx.strokeStyle = 'rgba(130, 110, 90, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(w * 0.2, -h * 0.3);
+    ctx.lineTo(-w * 0.15, h * 0.15);
+    ctx.stroke();
+    // Crumpled shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(-w * 0.2, -h * 0.2, w * 0.4, h * 0.4);
+  }
+}
+
+// ---- SLINGSHOT DRAWING ----
+function drawSlingshotBack(ctx, slingX, slingY) {
+  ctx.fillStyle = '#4A2E18';
+  ctx.fillRect(slingX - 18, slingY - 44, 7, 50);
+}
+
+function drawSlingshotFront(ctx, slingX, slingY) {
+  ctx.fillStyle = '#6B4226';
+  ctx.fillRect(slingX + 11, slingY - 44, 7, 50);
   
   // Base
   ctx.fillStyle = '#4A2E18';
-  ctx.fillRect(slingX - 22, slingY + 2, 44, 12);
-  ctx.fillRect(slingX - 16, slingY + 10, 32, 20);
+  ctx.fillRect(slingX - 20, slingY + 4, 40, 9);
+  ctx.fillRect(slingX - 14, slingY + 11, 28, 16);
   
-  // Fork tops (Y shape)
+  // Fork tops
   ctx.fillStyle = '#6B4226';
   ctx.beginPath();
-  ctx.arc(slingX - 16, slingY - 48, 6, 0, Math.PI * 2);
-  ctx.arc(slingX + 16, slingY - 48, 6, 0, Math.PI * 2);
+  ctx.arc(slingX - 14, slingY - 42, 5, 0, Math.PI * 2);
+  ctx.arc(slingX + 14, slingY - 42, 5, 0, Math.PI * 2);
   ctx.fill();
-}
-
-function drawSlingshotBand(ctx, slingX, slingY, turdX, turdY, pulling) {
-  if (!pulling) return;
-  
-  // Back band
-  ctx.strokeStyle = '#4A2E18';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(slingX - 16, slingY - 46);
-  ctx.lineTo(turdX, turdY);
-  ctx.stroke();
-  
-  // Front band
-  ctx.strokeStyle = '#6B4226';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(slingX + 16, slingY - 46);
-  ctx.lineTo(turdX, turdY);
-  ctx.stroke();
 }
 
 // ---- BACKGROUND ----
 function drawBackground(ctx) {
-  const w = canvas.width;
-  const h = canvas.height;
+  const w = VIRTUAL_W;
+  const h = VIRTUAL_H;
   const groundY = h - GROUND_HEIGHT;
   
   // Sky gradient
@@ -538,17 +670,17 @@ function drawBackground(ctx) {
   ctx.fillRect(0, 0, w, groundY);
   
   // Clouds
-  drawCloud(ctx, w * 0.15, h * 0.12, 60);
-  drawCloud(ctx, w * 0.45, h * 0.08, 80);
-  drawCloud(ctx, w * 0.75, h * 0.18, 50);
-  drawCloud(ctx, w * 0.9, h * 0.06, 70);
+  drawCloud(ctx, w * 0.15, h * 0.12, 50);
+  drawCloud(ctx, w * 0.45, h * 0.08, 65);
+  drawCloud(ctx, w * 0.75, h * 0.18, 40);
+  drawCloud(ctx, w * 0.9, h * 0.06, 55);
   
   // Hills background
   ctx.fillStyle = '#6BAF6E';
   ctx.beginPath();
   ctx.moveTo(0, groundY);
-  for (let x = 0; x <= w; x += 40) {
-    ctx.lineTo(x, groundY - 30 - Math.sin(x * 0.005) * 25 - Math.sin(x * 0.012) * 15);
+  for (let x = 0; x <= w; x += 30) {
+    ctx.lineTo(x, groundY - 25 - Math.sin(x * 0.006) * 20 - Math.sin(x * 0.015) * 12);
   }
   ctx.lineTo(w, groundY);
   ctx.closePath();
@@ -565,17 +697,16 @@ function drawBackground(ctx) {
   
   // Grass tufts
   ctx.strokeStyle = '#6BAF6E';
-  ctx.lineWidth = 2;
-  for (let x = 0; x < w; x += 20 + Math.random() * 15) {
-    const gx = x;
+  ctx.lineWidth = 1.5;
+  for (let x = 0; x < w; x += 18 + Math.random() * 12) {
     const gy = groundY;
     ctx.beginPath();
-    ctx.moveTo(gx, gy);
-    ctx.quadraticCurveTo(gx - 4, gy - 8, gx - 2, gy - 12);
+    ctx.moveTo(x, gy);
+    ctx.quadraticCurveTo(x - 3, gy - 7, x - 1, gy - 10);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(gx, gy);
-    ctx.quadraticCurveTo(gx + 5, gy - 10, gx + 3, gy - 14);
+    ctx.moveTo(x, gy);
+    ctx.quadraticCurveTo(x + 4, gy - 8, x + 2, gy - 12);
     ctx.stroke();
   }
 }
@@ -594,13 +725,13 @@ function drawCloud(ctx, x, y, size) {
 function drawTrajectory(ctx, startX, startY, vx, vy) {
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   let tx = startX, ty = startY, tvx = vx, tvy = vy;
+  const groundY = VIRTUAL_H - GROUND_HEIGHT;
   for (let i = 0; i < 30; i++) {
     const dt = 0.05;
-    tvx = tvx;
     tvy += GRAVITY * dt;
     tx += tvx * dt;
     ty += tvy * dt;
-    if (ty > canvas.height - GROUND_HEIGHT) break;
+    if (ty > groundY) break;
     if (i % 2 === 0) {
       ctx.beginPath();
       ctx.arc(tx, ty, 2.5 - i * 0.06, 0, Math.PI * 2);
@@ -609,116 +740,108 @@ function drawTrajectory(ctx, startX, startY, vx, vy) {
   }
 }
 
-// ---- LEVELS ----
+// ---- LEVELS (in virtual coords) ----
 function createLevels() {
-  const gY = () => canvas.height - GROUND_HEIGHT;
+  const G = VIRTUAL_H - GROUND_HEIGHT; // ground Y line
   
   return [
     // Level 1 — Simple intro
     {
       turds: 3,
-      blocks: (g) => [
-        makeBlock(g, 480, g - 80, 20, 80, 'wood'),
-        makeBlock(g, 560, g - 80, 20, 80, 'wood'),
-        makeBlock(g, 475, g - 100, 110, 20, 'wood'),
+      blocks: () => [
+        makeBlock(G, 500, G - 80, 20, 80, 'wood'),
+        makeBlock(G, 580, G - 80, 20, 80, 'wood'),
+        makeBlock(G, 495, G - 100, 110, 20, 'wood'),
       ],
-      pigs: (g) => [
-        new Pig(520, g - 30, 25),
+      pigs: () => [
+        new Pig(540, G - 30, 25),
       ],
     },
     // Level 2 — Two pigs, mixed materials
     {
       turds: 4,
-      blocks: (g) => [
-        makeBlock(g, 500, g - 60, 20, 60, 'wood'),
-        makeBlock(g, 560, g - 60, 20, 60, 'wood'),
-        makeBlock(g, 495, g - 80, 90, 20, 'wood'),
-        makeBlock(g, 680, g - 80, 20, 80, 'stone'),
-        makeBlock(g, 740, g - 80, 20, 80, 'stone'),
-        makeBlock(g, 675, g - 100, 90, 20, 'stone'),
+      blocks: () => [
+        makeBlock(G, 500, G - 60, 20, 60, 'wood'),
+        makeBlock(G, 570, G - 60, 20, 60, 'wood'),
+        makeBlock(G, 495, G - 80, 100, 20, 'wood'),
+        makeBlock(G, 680, G - 80, 20, 80, 'stone'),
+        makeBlock(G, 750, G - 80, 20, 80, 'stone'),
+        makeBlock(G, 675, G - 100, 100, 20, 'stone'),
       ],
-      pigs: (g) => [
-        new Pig(530, g - 25, 22),
-        new Pig(710, g - 25, 22),
+      pigs: () => [
+        new Pig(535, G - 25, 22),
+        new Pig(715, G - 25, 22),
       ],
     },
     // Level 3 — Tower
     {
       turds: 4,
-      blocks: (g) => [
-        makeBlock(g, 580, g - 60, 20, 60, 'stone'),
-        makeBlock(g, 660, g - 60, 20, 60, 'stone'),
-        makeBlock(g, 575, g - 80, 110, 20, 'wood'),
-        makeBlock(g, 600, g - 140, 20, 60, 'wood'),
-        makeBlock(g, 640, g - 140, 20, 60, 'wood'),
-        makeBlock(g, 595, g - 160, 70, 20, 'wood'),
-        makeBlock(g, 610, g - 200, 20, 40, 'glass'),
-        makeBlock(g, 605, g - 215, 30, 15, 'glass'),
+      blocks: () => [
+        makeBlock(G, 580, G - 60, 20, 60, 'stone'),
+        makeBlock(G, 660, G - 60, 20, 60, 'stone'),
+        makeBlock(G, 575, G - 80, 110, 20, 'wood'),
+        makeBlock(G, 600, G - 140, 20, 60, 'wood'),
+        makeBlock(G, 640, G - 140, 20, 60, 'wood'),
+        makeBlock(G, 595, G - 160, 70, 20, 'wood'),
+        makeBlock(G, 615, G - 200, 20, 40, 'glass'),
+        makeBlock(G, 607, G - 215, 30, 15, 'glass'),
       ],
-      pigs: (g) => [
-        new Pig(620, g - 25, 22),
-        new Pig(620, g - 105, 20),
+      pigs: () => [
+        new Pig(620, G - 25, 22),
+        new Pig(620, G - 105, 20),
       ],
     },
     // Level 4 — Fortress
     {
       turds: 5,
-      blocks: (g) => [
-        // Left wall
-        makeBlock(g, 480, g - 100, 20, 100, 'stone'),
-        // Right wall
-        makeBlock(g, 700, g - 100, 20, 100, 'stone'),
-        // Roof
-        makeBlock(g, 475, g - 120, 250, 20, 'stone'),
-        // Inner structure
-        makeBlock(g, 540, g - 60, 15, 60, 'wood'),
-        makeBlock(g, 640, g - 60, 15, 60, 'wood'),
-        makeBlock(g, 535, g - 75, 125, 15, 'wood'),
-        // Glass decorations
-        makeBlock(g, 560, g - 30, 80, 15, 'glass'),
-        makeBlock(g, 510, g - 160, 15, 40, 'glass'),
-        makeBlock(g, 690, g - 160, 15, 40, 'glass'),
-        makeBlock(g, 505, g - 175, 205, 15, 'glass'),
+      blocks: () => [
+        makeBlock(G, 480, G - 100, 20, 100, 'stone'),
+        makeBlock(G, 700, G - 100, 20, 100, 'stone'),
+        makeBlock(G, 475, G - 120, 250, 20, 'stone'),
+        makeBlock(G, 540, G - 60, 15, 60, 'wood'),
+        makeBlock(G, 640, G - 60, 15, 60, 'wood'),
+        makeBlock(G, 535, G - 75, 125, 15, 'wood'),
+        makeBlock(G, 560, G - 30, 80, 15, 'glass'),
+        makeBlock(G, 510, G - 160, 15, 40, 'glass'),
+        makeBlock(G, 690, G - 160, 15, 40, 'glass'),
+        makeBlock(G, 505, G - 175, 205, 15, 'glass'),
       ],
-      pigs: (g) => [
-        new Pig(560, g - 25, 20),
-        new Pig(620, g - 25, 20),
-        new Pig(590, g - 145, 18),
+      pigs: () => [
+        new Pig(560, G - 25, 20),
+        new Pig(620, G - 25, 20),
+        new Pig(590, G - 145, 18),
       ],
     },
     // Level 5 — Final challenge
     {
       turds: 5,
-      blocks: (g) => [
-        // Twin towers
-        makeBlock(g, 450, g - 120, 20, 120, 'stone'),
-        makeBlock(g, 530, g - 120, 20, 120, 'stone'),
-        makeBlock(g, 445, g - 140, 110, 20, 'stone'),
+      blocks: () => [
+        makeBlock(G, 450, G - 120, 20, 120, 'stone'),
+        makeBlock(G, 530, G - 120, 20, 120, 'stone'),
+        makeBlock(G, 445, G - 140, 110, 20, 'stone'),
         
-        makeBlock(g, 650, g - 120, 20, 120, 'stone'),
-        makeBlock(g, 730, g - 120, 20, 120, 'stone'),
-        makeBlock(g, 645, g - 140, 110, 20, 'stone'),
+        makeBlock(G, 650, G - 120, 20, 120, 'stone'),
+        makeBlock(G, 730, G - 120, 20, 120, 'stone'),
+        makeBlock(G, 645, G - 140, 110, 20, 'stone'),
         
-        // Bridge
-        makeBlock(g, 545, g - 80, 110, 15, 'wood'),
-        makeBlock(g, 560, g - 60, 15, 60, 'wood'),
-        makeBlock(g, 630, g - 60, 15, 60, 'wood'),
+        makeBlock(G, 545, G - 80, 110, 15, 'wood'),
+        makeBlock(G, 560, G - 60, 15, 60, 'wood'),
+        makeBlock(G, 640, G - 60, 15, 60, 'wood'),
         
-        // Top structures
-        makeBlock(g, 470, g - 180, 15, 40, 'glass'),
-        makeBlock(g, 510, g - 180, 15, 40, 'glass'),
-        makeBlock(g, 465, g - 195, 65, 15, 'glass'),
+        makeBlock(G, 470, G - 180, 15, 40, 'glass'),
+        makeBlock(G, 510, G - 180, 15, 40, 'glass'),
+        makeBlock(G, 465, G - 195, 65, 15, 'glass'),
         
-        makeBlock(g, 670, g - 180, 15, 40, 'glass'),
-        makeBlock(g, 710, g - 180, 15, 40, 'glass'),
-        makeBlock(g, 665, g - 195, 65, 15, 'glass'),
+        makeBlock(G, 670, G - 180, 15, 40, 'glass'),
+        makeBlock(G, 710, G - 180, 15, 40, 'glass'),
+        makeBlock(G, 665, G - 195, 65, 15, 'glass'),
       ],
-      pigs: (g) => [
-        new Pig(490, g - 25, 22),
-        new Pig(690, g - 25, 22),
-        new Pig(595, g - 25, 20),
-        new Pig(490, g - 165, 16),
-        new Pig(690, g - 165, 16),
+      pigs: () => [
+        new Pig(490, G - 25, 22),
+        new Pig(690, G - 25, 22),
+        new Pig(595, G - 25, 20),
+        new Pig(490, G - 165, 16),
+        new Pig(690, G - 165, 16),
       ],
     },
   ];
@@ -743,7 +866,7 @@ function makeBlock(groundY, x, y, w, h, material) {
 
 // ---- GAME STATE ----
 const state = {
-  phase: 'menu', // menu, aiming, flying, settling, levelComplete, gameOver
+  phase: 'menu',
   currentLevel: 0,
   score: 0,
   turdsRemaining: 0,
@@ -760,7 +883,7 @@ const state = {
 };
 
 function getSlingY() {
-  return canvas.height - GROUND_HEIGHT - SLING_Y_BASE_OFFSET + 50;
+  return VIRTUAL_H - GROUND_HEIGHT - SLING_Y_BASE_OFFSET + 50;
 }
 
 function loadLevel(index) {
@@ -768,18 +891,16 @@ function loadLevel(index) {
   state.levels = levels;
   
   if (index >= levels.length) {
-    // Won all levels
     state.phase = 'menu';
     return;
   }
   
   const level = levels[index];
-  const gY = canvas.height - GROUND_HEIGHT;
   
   state.currentLevel = index;
   state.turdsRemaining = level.turds;
-  state.blocks = level.blocks(gY);
-  state.pigs = level.pigs(gY);
+  state.blocks = level.blocks();
+  state.pigs = level.pigs();
   state.turds = [];
   state.currentTurd = null;
   state.isPulling = false;
@@ -823,65 +944,21 @@ function updateHUD() {
   }
 }
 
-// ---- INPUT ----
+// ---- INPUT (converted to virtual coords) ----
 const mouse = { x: 0, y: 0, down: false };
+
+function getVirtualPos(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = clientX - rect.left;
+  const sy = clientY - rect.top;
+  return screenToVirtual(sx, sy);
+}
 
 canvas.addEventListener('mousedown', (e) => {
   initAudio();
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = e.clientX - rect.left;
-  mouse.y = e.clientY - rect.top;
-  mouse.down = true;
-  
-  if (state.phase === 'aiming' && state.currentTurd) {
-    const turd = state.currentTurd;
-    const dx = mouse.x - turd.x;
-    const dy = mouse.y - turd.y;
-    if (Math.sqrt(dx * dx + dy * dy) < 50) {
-      state.isPulling = true;
-      state.pullStart = { x: turd.x, y: turd.y };
-    }
-  }
-});
-
-canvas.addEventListener('mousemove', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  mouse.x = e.clientX - rect.left;
-  mouse.y = e.clientY - rect.top;
-});
-
-canvas.addEventListener('mouseup', () => {
-  mouse.down = false;
-  
-  if (state.isPulling && state.currentTurd) {
-    const turd = state.currentTurd;
-    const slingY = getSlingY();
-    const dx = SLING_X - turd.x;
-    const dy = (slingY - 48) - turd.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    
-    if (dist > 10) {
-      turd.vx = dx * SLING_POWER;
-      turd.vy = dy * SLING_POWER;
-      turd.launched = true;
-      state.phase = 'flying';
-      playLaunch();
-    } else {
-      turd.x = SLING_X;
-      turd.y = slingY - 48;
-    }
-    state.isPulling = false;
-  }
-});
-
-// Touch support
-canvas.addEventListener('touchstart', (e) => {
-  e.preventDefault();
-  initAudio();
-  const rect = canvas.getBoundingClientRect();
-  const touch = e.touches[0];
-  mouse.x = touch.clientX - rect.left;
-  mouse.y = touch.clientY - rect.top;
+  const pos = getVirtualPos(e.clientX, e.clientY);
+  mouse.x = pos.x;
+  mouse.y = pos.y;
   mouse.down = true;
   
   if (state.phase === 'aiming' && state.currentTurd) {
@@ -893,20 +970,56 @@ canvas.addEventListener('touchstart', (e) => {
       state.pullStart = { x: turd.x, y: turd.y };
     }
   }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const pos = getVirtualPos(e.clientX, e.clientY);
+  mouse.x = pos.x;
+  mouse.y = pos.y;
+});
+
+canvas.addEventListener('mouseup', () => {
+  mouse.down = false;
+  releaseSling();
+});
+
+// Touch support — large touch targets for iPhone
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  initAudio();
+  const touch = e.touches[0];
+  const pos = getVirtualPos(touch.clientX, touch.clientY);
+  mouse.x = pos.x;
+  mouse.y = pos.y;
+  mouse.down = true;
+  
+  if (state.phase === 'aiming' && state.currentTurd) {
+    const turd = state.currentTurd;
+    const dx = mouse.x - turd.x;
+    const dy = mouse.y - turd.y;
+    // 90px touch radius in virtual coords for easy mobile grab
+    if (Math.sqrt(dx * dx + dy * dy) < 90) {
+      state.isPulling = true;
+      state.pullStart = { x: turd.x, y: turd.y };
+    }
+  }
 }, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
   e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
   const touch = e.touches[0];
-  mouse.x = touch.clientX - rect.left;
-  mouse.y = touch.clientY - rect.top;
+  const pos = getVirtualPos(touch.clientX, touch.clientY);
+  mouse.x = pos.x;
+  mouse.y = pos.y;
 }, { passive: false });
 
 canvas.addEventListener('touchend', (e) => {
   e.preventDefault();
   mouse.down = false;
-  
+  releaseSling();
+}, { passive: false });
+
+function releaseSling() {
   if (state.isPulling && state.currentTurd) {
     const turd = state.currentTurd;
     const slingY = getSlingY();
@@ -926,7 +1039,7 @@ canvas.addEventListener('touchend', (e) => {
     }
     state.isPulling = false;
   }
-}, { passive: false });
+}
 
 // ---- COLLISION DETECTION ----
 function circleRectCollision(cx, cy, cr, rx, ry, rw, rh) {
@@ -956,7 +1069,6 @@ function resolveCircleRect(turd, block) {
   turd.x += nx * overlap;
   turd.y += ny * overlap;
   
-  // Impulse
   const relVel = turd.vx * nx + turd.vy * ny;
   if (relVel > 0) return;
   
@@ -966,23 +1078,20 @@ function resolveCircleRect(turd, block) {
   turd.vx += j * nx * 0.7;
   turd.vy += j * ny * 0.7;
   
-  // Apply force to block
   if (block.type !== 'static') {
     block.vx -= j * nx * 0.3 * (turd.mass / block.mass);
     block.vy -= j * ny * 0.3 * (turd.mass / block.mass);
     block.angularVel += (Math.random() - 0.5) * 0.5;
   }
   
-  // Damage based on impact speed
   const impactSpeed = Math.abs(relVel);
   if (impactSpeed > DAMAGE_THRESHOLD) {
     const damage = impactSpeed * 1.2;
     if (block.applyDamage(damage)) {
-      // Block destroyed
       state.score += block.material === 'stone' ? 500 : block.material === 'wood' ? 300 : 200;
       emitParticles(block.cx, block.cy, 15, {
         spread: 250, speed: 180, life: 0.6, lifeVar: 0.3,
-        colors: block.material === 'wood' ? ['#A0764A', '#6B4226', '#C89860'] :
+        colors: block.material === 'wood' ? ['#F5F0EB', '#D4C5B2', '#EDE4DA', '#B5A48E'] :
                 block.material === 'stone' ? ['#888', '#666', '#aaa'] :
                 ['#A0D8EF', '#80C0E0', '#C0E8FF'],
         size: 3, sizeVar: 4
@@ -1021,7 +1130,6 @@ function resolveCircleCircle(turd, pig) {
   pig.vx += j * nx * 1.0;
   pig.vy += j * ny * 1.0;
   
-  // Damage
   const impactSpeed = Math.abs(relVel);
   const damage = impactSpeed * 1.5;
   if (pig.applyDamage(damage)) {
@@ -1052,23 +1160,20 @@ function blockBlockCollision(a, b) {
     const sign = a.cx < b.cx ? -1 : 1;
     if (a.type !== 'static') a.x += sign * overlapX * 0.5;
     if (b.type !== 'static') b.x -= sign * overlapX * 0.5;
-    
-    const relVel = a.vx - b.vx;
     if (a.type !== 'static') a.vx = -a.vx * 0.3;
     if (b.type !== 'static') b.vx = -b.vx * 0.3;
   } else {
     const sign = a.cy < b.cy ? -1 : 1;
     if (a.type !== 'static') a.y += sign * overlapY * 0.5;
     if (b.type !== 'static') b.y -= sign * overlapY * 0.5;
-    
-    if (a.type !== 'static') { a.vy = -a.vy * 0.3; }
-    if (b.type !== 'static') { b.vy = -b.vy * 0.3; }
+    if (a.type !== 'static') a.vy = -a.vy * 0.3;
+    if (b.type !== 'static') b.vy = -b.vy * 0.3;
   }
 }
 
 function blockGroundCollision(block) {
   if (block.destroyed || block.type === 'static') return;
-  const groundY = canvas.height - GROUND_HEIGHT;
+  const groundY = VIRTUAL_H - GROUND_HEIGHT;
   
   if (block.y + block.h > groundY) {
     const impact = Math.abs(block.vy);
@@ -1085,7 +1190,7 @@ function blockGroundCollision(block) {
         state.score += block.material === 'stone' ? 500 : block.material === 'wood' ? 300 : 200;
         emitParticles(block.cx, block.cy, 8, {
           spread: 150, speed: 100, life: 0.4,
-          colors: ['#888', '#666'],
+          colors: block.material === 'wood' ? ['#F5F0EB', '#D4C5B2'] : ['#888', '#666'],
           size: 2, sizeVar: 2
         });
         playBreak();
@@ -1094,9 +1199,9 @@ function blockGroundCollision(block) {
     }
   }
   
-  // Side boundaries
+  // Side boundaries (virtual coords)
   if (block.x < 0) { block.x = 0; block.vx *= -0.3; }
-  if (block.x + block.w > canvas.width) { block.x = canvas.width - block.w; block.vx *= -0.3; }
+  if (block.x + block.w > VIRTUAL_W) { block.x = VIRTUAL_W - block.w; block.vx *= -0.3; }
 }
 
 function blockPigCollision(block, pig) {
@@ -1158,8 +1263,8 @@ function update(dt) {
     turd.update(dt);
     
     if (turd.launched && turd.active) {
-      // Ground collision for turd
-      const groundY = canvas.height - GROUND_HEIGHT;
+      // Ground collision for turd (virtual coords)
+      const groundY = VIRTUAL_H - GROUND_HEIGHT;
       if (turd.y + turd.radius > groundY) {
         turd.y = groundY - turd.radius;
         turd.vy *= -0.3;
@@ -1245,7 +1350,6 @@ function update(dt) {
   if (state.phase === 'settling') {
     state.settleTimer += dt;
     
-    // Check if everything has settled
     let allSettled = true;
     for (const block of state.blocks) {
       if (!block.destroyed && block.speed > MIN_VELOCITY) {
@@ -1261,11 +1365,9 @@ function update(dt) {
     }
     
     if (allSettled || state.settleTimer > SETTLE_TIME) {
-      // Check win/lose
       const pigsAlive = state.pigs.filter(p => !p.destroyed).length;
       
       if (pigsAlive === 0) {
-        // Level complete
         state.score += state.turdsRemaining * 2000;
         showLevelComplete();
         return;
@@ -1274,7 +1376,6 @@ function update(dt) {
       if (state.turdsRemaining > 0) {
         spawnNextTurd();
       } else {
-        // No turds left and pigs alive — game over
         showGameOver();
       }
     }
@@ -1283,7 +1384,21 @@ function update(dt) {
 
 // ---- RENDER ----
 function render() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  
+  // Clear the whole physical canvas
+  const vv = window.visualViewport;
+  const screenW = vv ? vv.width : window.innerWidth;
+  const screenH = vv ? vv.height : window.innerHeight;
+  ctx.clearRect(0, 0, screenW, screenH);
+  
+  // Fill letterbox areas with dark color
+  ctx.fillStyle = '#1a0e05';
+  ctx.fillRect(0, 0, screenW, screenH);
+  
+  // Apply virtual coordinate transform
+  applyVirtualTransform();
   
   drawBackground(ctx);
   
@@ -1292,15 +1407,14 @@ function render() {
   const slingY = getSlingY();
   
   // Draw back of slingshot
-  ctx.fillStyle = '#4A2E18';
-  ctx.fillRect(SLING_X - 20, slingY - 48, 8, 55);
+  drawSlingshotBack(ctx, SLING_X, slingY);
   
   // Draw slingshot band (back)
   if (state.isPulling && state.currentTurd) {
     ctx.strokeStyle = '#4A2E18';
     ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.moveTo(SLING_X - 16, slingY - 46);
+    ctx.moveTo(SLING_X - 14, slingY - 42);
     ctx.lineTo(state.currentTurd.x, state.currentTurd.y);
     ctx.stroke();
   }
@@ -1321,27 +1435,14 @@ function render() {
   }
   
   // Draw front of slingshot
-  ctx.fillStyle = '#6B4226';
-  ctx.fillRect(SLING_X + 12, slingY - 48, 8, 55);
-  
-  // Slingshot base
-  ctx.fillStyle = '#4A2E18';
-  ctx.fillRect(SLING_X - 22, slingY + 4, 44, 10);
-  ctx.fillRect(SLING_X - 16, slingY + 12, 32, 18);
-  
-  // Fork tops
-  ctx.fillStyle = '#6B4226';
-  ctx.beginPath();
-  ctx.arc(SLING_X - 16, slingY - 46, 5, 0, Math.PI * 2);
-  ctx.arc(SLING_X + 16, slingY - 46, 5, 0, Math.PI * 2);
-  ctx.fill();
+  drawSlingshotFront(ctx, SLING_X, slingY);
   
   // Front band
   if (state.isPulling && state.currentTurd) {
     ctx.strokeStyle = '#6B4226';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(SLING_X + 16, slingY - 46);
+    ctx.moveTo(SLING_X + 14, slingY - 42);
     ctx.lineTo(state.currentTurd.x, state.currentTurd.y);
     ctx.stroke();
     
@@ -1375,7 +1476,6 @@ function showLevelComplete() {
   
   document.getElementById('completionScore').textContent = `Score: ${state.score}`;
   
-  // Calculate stars
   const maxScore = state.pigs.length * 1000 + state.blocks.length * 300 + (state.levels[state.currentLevel].turds) * 2000;
   const pct = state.score / maxScore;
   const stars = pct > 0.7 ? 3 : pct > 0.4 ? 2 : 1;
@@ -1385,7 +1485,6 @@ function showLevelComplete() {
     el.className = 'star' + (i < stars ? ' earned' : '');
   });
   
-  // Hide next level if it's the last
   document.getElementById('nextLevelBtn').style.display = 
     state.currentLevel < (state.levels.length - 1) ? 'inline-block' : 'none';
 }
@@ -1441,15 +1540,15 @@ function updateDebug() {
 let debugVisible = false;
 function drawDebug(ctx) {
   if (!debugVisible) return;
+  // Draw debug in virtual coords (already transformed)
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,.6)';
-  ctx.fillRect(0, canvas.height - 22, 180, 22);
+  ctx.fillRect(0, VIRTUAL_H - 22, 200, 22);
   ctx.font = '11px monospace';
   ctx.fillStyle = _fps < 30 ? '#f44' : '#0f0';
-  ctx.fillText(`FPS:${_fps.toFixed(0)} ${_ft.toFixed(1)}ms`, 6, canvas.height - 7);
+  ctx.fillText(`FPS:${_fps.toFixed(0)} ${_ft.toFixed(1)}ms  Scale:${scale.toFixed(2)}`, 6, VIRTUAL_H - 7);
   ctx.restore();
 }
-// Toggle debug with D key
 document.addEventListener('keydown', (e) => { if (e.key === 'd' || e.key === 'D') debugVisible = !debugVisible; });
 
 // ---- GAME LOOP ----
@@ -1494,10 +1593,13 @@ window.render_game_to_text = () => {
       y: Math.round(state.currentTurd.y),
       launched: state.currentTurd.launched,
       active: state.currentTurd.active,
+      radius: state.currentTurd.radius,
     } : null,
     pigsAlive: state.pigs.filter(p => !p.destroyed).length,
     pigsTotal: state.pigs.length,
     blocksAlive: state.blocks.filter(b => !b.destroyed).length,
     blocksTotal: state.blocks.length,
+    virtualSize: { w: VIRTUAL_W, h: VIRTUAL_H },
+    scale: scale.toFixed(2),
   });
 };
