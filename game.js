@@ -12,7 +12,7 @@ const VH = 540;
 const GRAVITY = 500;
 const GROUND_H = 55;             // ground strip height
 const SLING_X = 160;             // slingshot X position
-const SLING_POWER = 5.0;         // 1.25x v3 power for better reach
+const SLING_POWER = 4.5;         // ~12.5% above original (4.0), dialed back from 5.0
 const MAX_PULL = 140;            // bigger pull range
 const MIN_VELOCITY = 8;
 const DAMAGE_THRESHOLD = 12;
@@ -510,13 +510,16 @@ function drawCloud(c,x,y,s) {
 }
 
 function drawTrajectory(c,sx,sy,vx,vy) {
-  c.fillStyle='rgba(255,255,255,0.4)';
   let tx=sx,ty=sy,tvx=vx,tvy=vy;
   const gy=VH-GROUND_H;
   for (let i=0;i<30;i++) {
     const dt=0.05; tvy+=GRAVITY*dt; tx+=tvx*dt; ty+=tvy*dt;
     if (ty>gy) break;
-    if (i%2===0) { c.beginPath(); c.arc(tx,ty,2.5-i*0.06,0,Math.PI*2); c.fill(); }
+    if (i%2===0) {
+      const a = 0.85 - i*0.02; // fade slightly along path
+      c.fillStyle=`rgba(101,67,33,${a})`; // dark brown, highly visible
+      c.beginPath(); c.arc(tx,ty,4-i*0.07,0,Math.PI*2); c.fill();
+    }
   }
 }
 
