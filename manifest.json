@@ -1,0 +1,11 @@
+{
+  "name": "Angry Turds",
+  "short_name": "Angry Turds",
+  "description": "Fling poop. Destroy stuff. Feel great.",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#1a0e05",
+  "theme_color": "#1a0e05",
+  "icons": []
+}
